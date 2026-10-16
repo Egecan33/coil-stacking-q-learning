@@ -1,58 +1,50 @@
+"""Bounded evaluation of a trusted Q-table saved by train_model.py."""
 import numpy as np
 from custom_env import CustomEnv
 
 
-q_table = np.load("q_table.npy")  # Load the Q-table
+def encode_state(state_dict):
+    """Match the occupancy-only encoding used during training."""
+    return tuple(state_dict['bobbin_positions'])
 
 
-def test_specific_state(env, q_table, predefined_state):
-    # Set the environment to the predefined state
+def load_q_table(path='q_table.npy'):
+    """Load a trusted local artifact. NumPy object files may execute pickle code."""
+    table = np.load(path, allow_pickle=True).item()
+    if not isinstance(table, dict):
+        raise ValueError('Expected a Q-table dictionary saved by train_model.py')
+    return table
+
+
+def test_specific_state(env, q_table, predefined_state, max_steps=100):
     env.set_predefined_state(predefined_state)
-    state_dict = env.set_predefined_state(predefined_state)
-
-    done = False
+    state_dict = env.state
     total_reward = 0
-    step_count = 0
-
-    while not done:
+    for step_count in range(1, max_steps + 1):
         state = encode_state(state_dict)
-        # Choose the best action based on the Q-table
-        if state in q_table:
-            q_values = q_table[state]
-            action = np.argmax(q_values)
-        else:
-            # Default action if the state is not in the Q-table
-            action = 81
-
-        # Take the action and observe the outcome
-        new_state_dict, reward, done, _ = env.step(action)
+        available = env.find_available_moves()
+        q_values = q_table.get(state)
+        action = max(available, key=lambda a: q_values[a]) if q_values is not None else 81
+        state_dict, reward, done, _ = env.step(action)
         total_reward += reward
-        step_count += 1
-
-        # Print the step, action, and current state
-        print(f"Step {step_count}: Action taken: {action}")
+        print(f'Step {step_count}: Action taken: {action}')
         env.render()
-        print(f"Reward for this step: {reward}, Total Reward: {total_reward}")
-
-        # Update the state
-        state_dict = new_state_dict
-
-    print(f"Test finished after {step_count} steps. Total Reward: {total_reward}")
+        print(f'Reward for this step: {reward}, Total Reward: {total_reward}')
+        if done:
+            return total_reward
+    print(f'Evaluation stopped at the {max_steps}-step safety limit.')
+    return total_reward
 
 
 def main():
-    q_table = np.load("q_table.npy", allow_pickle=True)
+    q_table = load_q_table()
     env = CustomEnv()
-
     predefined_state = {
-        "bobbin_positions": [1, 1, 0, 0, 1, 0, 0, 0, 0],
-        "bobbin_priorities": [2, 2, 0, 0, 10, 0, 0, 0, 0],
+        'bobbin_positions': [1, 1, 0, 0, 1, 0, 0, 0, 0],
+        'bobbin_priorities': [2, 2, 0, 0, 10, 0, 0, 0, 0],
     }
-
     test_specific_state(env, q_table, predefined_state)
 
-    print("Testing completed.\n")
 
-
-if __name__ == "__main__":
+if __name__ == '__main__':
     main()

@@ -1,27 +1,46 @@
-Coil Stacking Optimization Using Q-Learning
+# Coil Stacking with Tabular Q-Learning
 
-This repository contains the implementation of a Q-Learning algorithm applied to a coil stacking optimization problem. The project aims to develop an efficient strategy for arranging coils in a three-dimensional stacking space, prioritizing high-urgency items while minimizing movements.
+A reinforcement-learning experiment for rearranging coils in a nine-slot stack. The custom environment encodes support and blocking rules, coil urgency, movement penalties and a stop action. It explores a logistics problem through tabular Q-learning; it does not establish an optimal policy.
 
-Overview
+## Repository map
 
-The project utilizes Q-Learning, a model-free reinforcement learning algorithm, to determine the optimal action-selection policy for organizing coils based on their priority levels. This method is particularly adept at handling complex and dynamic environments like coil stacking, where the state and action spaces are large and not well-defined.
+- `custom_env.py`: environment used by the training and evaluation scripts.
+- `train_model.py`: Q-learning updates and a 500,000-episode training loop; writes `q_table.npy` in the working directory.
+- `test_model.py`: bounded evaluation of a trusted saved Q-table on a predefined state.
+- `new_case.py`: unfinished alternative environment, with incomplete reward/state handling.
 
-Repository Contents
+The older README referenced `qlearn.py`, `clean_case.py` and `simple_case.py`; those files are not in the current branch.
 
-clean_case.py: The primary script containing the latest implementation of the custom environment for coil stacking, integrated with the Q-Learning algorithm. This is the main focus of the repository and is used for training the model.
-simple_case.py: An earlier version of the environment that served as a foundational step towards the current implementation. While it's not the focus of current development, it provides valuable insights into the evolution of the project.
-qlearn.py: The main script where the Q-Learning algorithm is implemented and interfaced with the environment defined in clean_case.py.
-Environment Setup
+## Local setup and smoke check
 
-The environment is structured as a series of layered grids, each representing a level within the stacking space. The stability of higher-level coils depends on the supporting coils beneath them. The custom environment class (CustomEnv) handles the dynamics of coil movement, validity of actions, reward calculation, and state transitions.
+Use Python 3.10 or 3.11 and the legacy Gym API used by this code:
 
-Q-Learning Implementation
+```bash
+python -m venv .venv
+source .venv/bin/activate
+pip install 'numpy<2' gym==0.26.2
+python -m unittest discover -s tests -v
+```
 
-The Q-Learning algorithm is implemented to estimate the value of each action within a specific state. It updates Q-values based on the rewards received from the environment and the predicted future rewards, balancing the exploration of new actions with the exploitation of known actions.
+The code uses legacy `reset() -> state` and four-value `step()` signatures. It is not a Gymnasium-compatible environment and its declared observation space does not describe the dictionary observations.
 
-Running the Project
+For evaluation, run `python test_model.py` only after obtaining or producing a **trusted** Q-table dictionary saved by `train_model.py`. NumPy object arrays use pickle; loading them can execute code. The committed binary was not deserialized during this review. The evaluator ignores invalid actions, stops on unknown states, and has a 100-step safety limit.
 
-Ensure you have Python and necessary libraries installed (e.g., gym, numpy).
-Clone the repository.
-Run qlearn.py to start the training process using the clean_case environment.
-You can also explore the simple_case.py for understanding the initial model structure.
+To inspect the state/action mechanics without loading a model:
+
+```python
+from custom_env import CustomEnv
+
+env = CustomEnv()
+state = env.reset()
+state, reward, done, info = env.step(81)  # stop action
+assert done
+```
+
+`python train_model.py` launches the full training loop immediately; inspect its episode count and output behavior before running it. Full training was not run during this review.
+
+## Validation and limitations
+
+Three evaluator regressions passed locally: trusted synthetic table round-trip, unknown-state stop, and valid-action selection with a step limit. An additional smoke call used the real environment and a synthetic empty table. These checks do not measure policy quality.
+
+The state encoder records occupancy but omits priorities, so different urgency assignments can share a Q-table key. The environment increments movement counts in both `step()` and `move_bobbin()`; reward and transition semantics need a separate review. Seeding, train/evaluation separation and baseline comparisons remain open work. No project-wide license is declared.
